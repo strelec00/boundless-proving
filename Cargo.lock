@@ -904,6 +904,7 @@ dependencies = [
  "dotenvy",
  "guests",
  "risc0-zkvm",
+ "serde_json",
  "sha2",
  "tokio",
  "tracing",

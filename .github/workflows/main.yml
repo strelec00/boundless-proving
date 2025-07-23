@@ -96,7 +96,7 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: lint guest rust code
-        working-directory: guests/is-even
+        working-directory: guests/mnist_prediction
         run: cargo fmt --all --check
 
 

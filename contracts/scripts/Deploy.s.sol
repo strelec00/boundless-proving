@@ -1,35 +1,45 @@
-// Copyright 2025 RISC Zero, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {Script, console2} from "forge-std/Script.sol";
+import {Script} from "forge-std/Script.sol";
+import {console2} from "forge-std/console2.sol";
+import {MNISTPredictor} from "../src/MNISTPredictor.sol";
 import {IRiscZeroVerifier} from "risc0/IRiscZeroVerifier.sol";
-import {EvenNumber} from "../src/EvenNumber.sol";
 
-contract Deploy is Script {
+contract DeployScript is Script {
     function run() external {
-        // load ENV variables first
-        uint256 key = vm.envUint("PRIVATE_KEY");
-        address verifierAddress = vm.envAddress("VERIFIER_ADDRESS");
-        vm.startBroadcast(key);
+        // Get the verifier address from environment
+        address verifierAddress = vm.envOr("RISC_ZERO_VERIFIER_ADDRESS", address(0));
 
-        IRiscZeroVerifier verifier = IRiscZeroVerifier(verifierAddress);
-        EvenNumber evenNumber = new EvenNumber(verifier);
-        address evenNumberAddress = address(evenNumber);
-        console2.log("Deployed EvenNumber to", evenNumberAddress);
+        if (verifierAddress == address(0)) {
+            console2.log("ERROR: RISC_ZERO_VERIFIER_ADDRESS not set");
+            console2.log("Please set the environment variable:");
+            console2.log("export RISC_ZERO_VERIFIER_ADDRESS=0x...");
+            return;
+        }
+
+        console2.log("Deploying MNISTPredictor...");
+        console2.log("Using verifier at:", verifierAddress);
+        console2.log("Deployer:", msg.sender);
+
+        vm.startBroadcast();
+
+        // Deploy the MNISTPredictor contract
+        MNISTPredictor predictor = new MNISTPredictor(
+            IRiscZeroVerifier(verifierAddress)
+        );
 
         vm.stopBroadcast();
+
+        console2.log("MNISTPredictor deployed at:", address(predictor));
+        console2.log(" Save this address for your app:");
+        console2.log("   --mnist-predictor-address", address(predictor));
+
+        // Verify the deployment
+        console2.log(" Verifying deployment...");
+        console2.log("   Image ID:");
+        console2.logBytes32(predictor.imageId());
+        console2.log("   Verifier:", address(predictor.verifier()));
+        console2.log("   Last prediction:", predictor.getLastPrediction());
     }
 }
