@@ -1,102 +1,148 @@
-# Boundless Foundry Template
+# ZK-AI Inference on Ethereum via Boundless & RISC Zero
 
-This template serves as a starter app powered by verifiable compute via [Boundless](https://docs.beboundless.xyz). 
+This project demonstrates **verifiable AI inference on-chain** using [RISC Zero](https://www.risczero.com/) and [Boundless](https://docs.beboundless.xyz/). A small neural network trained on MNIST is executed in a zero-knowledge VM (zkVM), and the resulting prediction is verified on the Ethereum blockchain via a smart contract.
 
-It is built around a simple smart contract, `EvenNumber` deployed on Sepolia, and its associated RISC Zero guest, `is-even`. To get you started, we have deployed to [EvenNumber contract](https://sepolia.etherscan.io/address/0xE819474E78ad6e1C720a21250b9986e1f6A866A3#code) to Sepolia; we have also pre-uploaded the `is-even` guest to IPFS.
+The model is run off-chain inside a zkVM, and a **zero-knowledge proof (seal)** is submitted to an Ethereum smart contract to **trustlessly verify** the prediction.
 
-## Quick-start
+## 🧠 What This Project Does
 
-1. [Install RISC Zero](https://dev.risczero.com/api/zkvm/install)
+- Runs a trained neural network (MNIST digit recognizer) in a zkVM
+- Produces a ZK proof of the model's prediction
+- Submits the prediction and proof to an Ethereum smart contract (`MNISTPredictor`) for on-chain verification
+- Stores the verified prediction on-chain
 
-   ```sh
-   curl -L https://risczero.com/install | bash
-   rzup install
-   ```
+## 🚀 Quick Start
 
-2. Clone this repo
+### 1. Install Dependencies
 
-   You can clone this repo with `git`, or use `forge init`:
+Install RISC Zero and Boundless CLI tooling:
 
-   ```bash
-   forge init --template https://github.com/boundless-xyz/boundless-foundry-template boundless-foundry-template
-   ```
-3. Set up your environment variables
-
-   Export your Sepolia wallet private key as an environment variable (making sure it has enough funds):
-
-   ```bash
-   export RPC_URL="https://ethereum-sepolia-rpc.publicnode.com"
-   export PRIVATE_KEY="YOUR_PRIVATE_KEY"
-   ```
-
-   You'll also need a deployment of the [EvenNumber contract](./contracts/src/EvenNumber.sol).
-   You can use a predeployed contract on Sepolia:
-
-   ```bash
-   export EVEN_NUMBER_ADDRESS="0xE819474E78ad6e1C720a21250b9986e1f6A866A3"
-   ```
-
-4. Run the example app
-
-   The [example app](apps/src/main.rs) will submit a request to the market for a proof that "4" is an even number, wait for the request to be fulfilled, and then submit that proof to the EvenNumber contract, setting the value to "4".
-
-   To run the example using the pre-uploaded zkVM guest:
-
-   ```bash
-   RUST_LOG=info cargo run --bin app -- --number 4 --program-url https://plum-accurate-weasel-904.mypinata.cloud/ipfs/QmU7eqsYWguHCYGQzcg42faQQkgRfWScig7BcsdM1sJciw
-   ```
-## Development
-
-### Build
-
-To build the example run:
-
+```bash
+curl -L https://risczero.com/install | bash
+rzup install
 ```
+
+Install Foundry for smart contract development:
+
+```bash
+curl -L https://foundry.paradigm.xyz | bash
+foundryup
+```
+
+### 2. Clone the Repository
+
+```bash
+git clone https://github.com/your-username/zk-ai-mnist-inference
+cd zk-ai-mnist-inference
+```
+
+### 3. Set Environment Variables
+
+Make sure your environment is configured with a valid Ethereum private key and RPC URL (e.g., for Sepolia testnet):
+
+```bash
+export RPC_URL="https://ethereum-sepolia-rpc.publicnode.com"
+export PRIVATE_KEY="your_private_key_here"
+export MNIST_PREDICTOR_ADDRESS="deployed_contract_address"
+```
+
+If uploading to IPFS via Pinata:
+
+```bash
+export PINATA_JWT="your_pinata_jwt_token"
+```
+
+### 4. Run the Inference App
+
+You can use either a sample MNIST image or provide your own.
+
+#### Option A: Run with Sample Image
+
+```bash
+RUST_LOG=info cargo run --bin app -- --sample
+```
+
+#### Option B: Run with Custom Image File
+
+```bash
+RUST_LOG=info cargo run --bin app -- --image-file ./input/your_image.txt
+```
+
+Image file format must be a list of 784 integers (28x28 pixels), either as a JSON array, CSV, or whitespace-separated.
+
+## 🧪 How It Works
+
+1. The guest binary performs inference using hardcoded weights
+2. The prediction result is committed to the journal in the zkVM
+3. A seal (ZK proof) and journal (output) are submitted via Boundless to Ethereum
+4. The `MNISTPredictor` smart contract verifies the seal and stores the result
+
+## 🧰 Development
+
+### Build Contracts & Guests
+
+```bash
 forge build
 cargo build
 ```
 
-### Test
-
-Test the Solidity smart contracts with:
+### Test Contracts and Guest Code
 
 ```bash
 forge test -vvv
-```
-
-Test the Rust code including the guest with:
-
-```bash
 cargo test
 ```
 
-### Deploying the EvenNumber contract
+## 🛠 Deploying the Smart Contract
 
-You can deploy your smart contracts using forge script. To deploy the `EvenNumber` contract, run:
-
-```
-VERIFIER_ADDRESS="0x925d8331ddc0a1F0d96E68CF073DFE1d92b69187" forge script contracts/scripts/Deploy.s.sol --rpc-url ${RPC_URL:?} --broadcast -vv
-export EVEN_NUMBER_ADDRESS=# address from the logs the script.
-```
-
-This will use the locally build guest binary, which you will need to upload using the steps below.
-
-### Uploading your own guest program
-
-When you modify your program, you'll need to upload your program to a public URL.
-You can use any file hosting service, and the Boundless SDK provides built-in support uploading to AWS S3, and to IPFS via [Pinata](https://www.pinata.cloud/).
-
-If you'd like to upload your program automatically using Pinata:
+Deploy the `MNISTPredictor` contract to Sepolia:
 
 ```bash
-# The JWT from your Pinata account: https://app.pinata.cloud/developers/api-keys
-export PINATA_JWT="YOUR_PINATA_JWT"
+VERIFIER_ADDRESS="your_verifier_address_here"
+forge script contracts/scripts/DeployMNISTPredictor.s.sol --rpc-url ${RPC_URL:?} --broadcast -vv
+export MNIST_PREDICTOR_ADDRESS="returned_address_from_deploy"
 ```
 
-Then run without the `--program-url` flag:
+## ☁️ Uploading Guest Programs
+
+You can upload the guest binary to IPFS or S3. To use Pinata:
 
 ```bash
-RUST_LOG=info cargo run --bin app -- --number 4
+export PINATA_JWT="your_pinata_jwt"
 ```
 
-You can also upload your program to any public URL ahead of time, and supply the URL via the `--program-url` flag.
+Run the app without the `--program-url` flag, and it will automatically upload and use the resulting URL:
+
+```bash
+cargo run --bin app -- --sample
+```
+
+Or, if you already uploaded your guest:
+
+```bash
+cargo run --bin app -- --sample --program-url https://your.ipfs.link/to/guest
+```
+
+## 📄 Smart Contracts
+
+- `MNISTPredictor.sol`: Accepts predictions, verifies ZK proofs, and stores results
+- Auto-generated interfaces via `alloy` are used in the Rust client
+
+## ✅ Status
+
+- ✅ ZK Inference
+- ✅ Seal Generation
+- ✅ Ethereum Verification
+- ✅ On-Chain Storage
+- 🔜 Frontend Interface
+- 🔜 NFT badge for correct predictions
+
+## 🧠 Credits
+
+- [RISC Zero](https://www.risczero.com/)
+- [Boundless Market](https://docs.beboundless.xyz/)
+- Inspired by `boundless-foundry-template`
+
+## 📜 License
+
+Apache-2.0 © 2024 RISC Zero & Contributors
