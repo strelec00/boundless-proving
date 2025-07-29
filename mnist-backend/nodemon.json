@@ -1,0 +1,12 @@
+{
+  "watch": ["."],
+  "ignore": [
+    "temp/**/*",
+    "*.tmp",
+    "*.temp",
+    "node_modules/**/*",
+    ".git/**/*"
+  ],
+  "ext": "js,json",
+  "delay": "1000"
+}
