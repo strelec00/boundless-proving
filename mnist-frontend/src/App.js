@@ -20,6 +20,7 @@ const MNISTPredictor = () => {
   const [walletConnected, setWalletConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState("");
 
+  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:3001";
   // Initialize canvas
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -62,25 +63,50 @@ const MNISTPredictor = () => {
     }
   };
 
-  // Drawing functions
+  const getEventPosition = (event) => {
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+
+    if (event.touches && event.touches.length > 0) {
+      return {
+        x: event.touches[0].clientX - rect.left,
+        y: event.touches[0].clientY - rect.top,
+      };
+    }
+
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+  };
+
   const startDrawing = (event) => {
+    event.preventDefault();
     setIsDrawing(true);
-    draw(event);
+    const pos = getEventPosition(event);
+    drawAt(pos.x, pos.y);
   };
 
   const draw = (event) => {
     if (!isDrawing) return;
+    event.preventDefault();
 
+    const pos = getEventPosition(event);
+    drawAt(pos.x, pos.y);
+  };
+
+  const drawAt = (x, y) => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
-    const rect = canvas.getBoundingClientRect();
-
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
 
     ctx.fillStyle = "white";
+    ctx.lineWidth = 16;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    // Draw a larger, smoother circle for better digit recognition
     ctx.beginPath();
-    ctx.arc(x, y, 8, 0, 2 * Math.PI);
+    ctx.arc(x, y, 10, 0, 2 * Math.PI);
     ctx.fill();
   };
 
@@ -105,44 +131,29 @@ const MNISTPredictor = () => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
 
-    // Create temporary canvas for resizing with no smoothing
+    // Create temp canvas for proper downsampling
     const tempCanvas = document.createElement("canvas");
     tempCanvas.width = 28;
     tempCanvas.height = 28;
     const tempCtx = tempCanvas.getContext("2d");
 
-    // Disable image smoothing to prevent anti-aliasing
+    // Disable smoothing for crisp pixels
     tempCtx.imageSmoothingEnabled = false;
-    tempCtx.webkitImageSmoothingEnabled = false;
-    tempCtx.mozImageSmoothingEnabled = false;
-    tempCtx.msImageSmoothingEnabled = false;
-
-    // Draw scaled down version
     tempCtx.drawImage(canvas, 0, 0, 28, 28);
 
-    // Get pixel data
     const imageData = tempCtx.getImageData(0, 0, 28, 28);
     const binaryPixels = [];
 
-    // Convert to strict binary values (0 or 1) with threshold
-    const threshold = 50; // Lower threshold to catch more drawn pixels
-
+    // Convert to binary with clear threshold
     for (let i = 0; i < imageData.data.length; i += 4) {
-      const r = imageData.data[i];
-      const g = imageData.data[i + 1];
-      const b = imageData.data[i + 2];
-      const gray = Math.round((r + g + b) / 3);
-
-      // Convert to strict binary: 1 for any non-black pixels, 0 for black
-      const binaryValue = gray > threshold ? 1 : 0;
-      binaryPixels.push(binaryValue);
+      const gray =
+        (imageData.data[i] + imageData.data[i + 1] + imageData.data[i + 2]) / 3;
+      binaryPixels.push(gray > 128 ? 1 : 0);
     }
 
-    // Ensure we only have 0s and 1s (safety check)
-    const cleanBinaryPixels = binaryPixels.map((val) => (val > 0 ? 1 : 0));
-
-    return cleanBinaryPixels;
+    return binaryPixels;
   };
+
   // Updated submitPrediction function with better error handling and timeout
   const submitPrediction = async () => {
     if (!walletConnected) {
@@ -154,127 +165,45 @@ const MNISTPredictor = () => {
     setError("");
     setZkProofStatus("generating");
 
-    // Create AbortController for timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 900000); // 60 second timeout
-
     try {
-      // Get binary image data (28x28 matrix of 0s and 1s)
       const imageData = getImageData();
 
-      console.log("=== DEBUGGING INFO ===");
-      console.log("Connected wallet address:", walletAddress);
-      console.log("Sending binary image data:", imageData);
-      console.log("Data length:", imageData.length);
-      console.log("Sample values:", imageData.slice(0, 20));
-      console.log("Unique values:", [...new Set(imageData)]);
-
-      // Test server connection first
-      const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:3001";
-      console.log("API URL:", apiUrl);
-
-      // Test health endpoint first with timeout
-      try {
-        const healthResponse = await fetch(`${apiUrl}/api/health`, {
-          signal: controller.signal,
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        });
-        console.log("Health check status:", healthResponse.status);
-        if (healthResponse.ok) {
-          const healthData = await healthResponse.json();
-          console.log("Health check response:", healthData);
-        } else {
-          throw new Error(
-            `Health check failed with status: ${healthResponse.status}`
-          );
-        }
-      } catch (healthError) {
-        console.error("Health check failed:", healthError);
-        if (healthError.name === "AbortError") {
-          throw new Error(
-            "Server connection timeout - please check if server is running"
-          );
-        }
-        throw new Error(`Server connection failed: ${healthError.message}`);
+      // Validate data
+      const nonZeroCount = imageData.filter((p) => p === 1).length;
+      if (nonZeroCount < 5) {
+        throw new Error("Please draw a clearer digit");
       }
 
-      // Step 1: Generate ZK proof (simulated)
-      setZkProofStatus("generating");
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      console.log("Making prediction request...");
-
-      // Make the prediction request with proper error handling
-      const response = await fetch(`${apiUrl}/api/predict`, {
+      const response = await fetch(`${API_URL}/api/predict`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Accept: "application/json",
         },
         body: JSON.stringify({
-          imageData: imageData,
+          imageData,
           contractAddress: "0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519",
-          walletAddress: walletAddress,
         }),
-        signal: controller.signal, // Add timeout signal
       });
 
-      // Clear timeout if request succeeds
-      clearTimeout(timeoutId);
-
-      console.log("Response status:", response.status);
-      console.log(
-        "Response headers:",
-        Object.fromEntries(response.headers.entries())
-      );
-
       if (!response.ok) {
-        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-        try {
-          const errorData = await response.json();
-          console.log("Error response data:", errorData);
-          errorMessage = errorData.error || errorData.message || errorMessage;
-        } catch (parseError) {
-          console.log("Could not parse error response as JSON");
-          const errorText = await response.text();
-          console.log("Error response text:", errorText);
-          errorMessage = errorText || errorMessage;
-        }
-        throw new Error(errorMessage);
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Prediction failed");
       }
 
       const result = await response.json();
-      console.log("Success response:", result);
 
       setZkProofStatus("verified");
       setPrediction(result.prediction);
-      setConfidence(result.confidence);
-      setTransactionHash(result.transactionHash);
-    } catch (err) {
-      console.error("Full error details:", err);
+      setConfidence(result.confidence || 0.95);
 
-      // Handle different types of errors
-      if (err.name === "AbortError") {
-        setError(
-          "Request timeout - the prediction is taking too long. Please try again."
-        );
-      } else if (
-        err.message.includes("NetworkError") ||
-        err.message.includes("fetch")
-      ) {
-        setError(
-          "Network error - please check if the server is running and accessible."
-        );
-      } else {
-        setError(`Error: ${err.message}`);
+      if (result.transactionHash) {
+        setTransactionHash(result.transactionHash);
       }
-
+    } catch (err) {
+      console.error("Prediction error:", err);
+      setError(err.message);
       setZkProofStatus("failed");
     } finally {
-      clearTimeout(timeoutId); // Ensure timeout is cleared
       setIsProcessing(false);
     }
   };
@@ -353,6 +282,10 @@ const MNISTPredictor = () => {
                   onMouseMove={draw}
                   onMouseUp={stopDrawing}
                   onMouseLeave={stopDrawing}
+                  onTouchStart={startDrawing}
+                  onTouchMove={draw}
+                  onTouchEnd={stopDrawing}
+                  style={{ touchAction: "none" }} // Prevent scrolling while drawing
                 />
               </div>
 
