@@ -899,6 +899,7 @@ dependencies = [
  "alloy",
  "alloy-contract",
  "anyhow",
+ "bincode",
  "boundless-market",
  "bytemuck",
  "clap",

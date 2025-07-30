@@ -1,18 +1,4 @@
-// Copyright 2024 RISC Zero, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-use alloy_primitives::U256;
+// guest/src/main.rs
 use risc0_zkvm::guest::env;
 
 mod weights {
@@ -27,25 +13,24 @@ fn relu(x: i32) -> i32 {
 }
 
 fn main() {
-    // FIXED: Use RISC Zero's standard deserialization instead of ABI decode
-    let input_data: Vec<U256> = env::read();
+    // Read input data as Vec<u32> directly (not U256)
+    let input_data: Vec<u32> = env::read();
+
+    // Debug print to see what we're getting
+    eprintln!("Guest received {} inputs", input_data.len());
 
     // Validate input length
     if input_data.len() != 784 {
         panic!("Invalid input length: expected 784, got {}", input_data.len());
     }
 
-    // Convert U256 to i32 array for neural network processing
+    // Convert to i32 array for neural network processing
     let mut input: [i32; 784] = [0; 784];
     for (i, &val) in input_data.iter().enumerate() {
-        if i < 784 {
-            // Convert U256 to i32, ensuring it's within valid range
-            let pixel_value = val.to::<u32>();
-            if pixel_value > 1 {
-                panic!("Invalid pixel value: {} (expected 0 or 1)", pixel_value);
-            }
-            input[i] = pixel_value as i32;
+        if val > 1 {
+            panic!("Invalid pixel value at index {}: {} (expected 0 or 1)", i, val);
         }
+        input[i] = val as i32;
     }
 
     // Layer 1: 784 -> 64 with ReLU activation
@@ -69,14 +54,15 @@ fn main() {
     }
 
     // Find predicted digit (argmax)
-    let (mut predicted_digit, mut max_val) = (0, out[0]);
+    let mut predicted_digit = 0u32;
+    let mut max_val = out[0];
     for i in 1..10 {
         if out[i] > max_val {
             max_val = out[i];
-            predicted_digit = i;
+            predicted_digit = i as u32;
         }
     }
 
-    // Commit the prediction as u32 (RISC Zero will handle the serialization)
-    env::commit(&(predicted_digit as u32));
+    // Commit the prediction
+    env::commit(&predicted_digit);
 }

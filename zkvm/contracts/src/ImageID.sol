@@ -20,5 +20,5 @@ pragma solidity ^0.8.20;
 
 library ImageID {
     bytes32 public constant MNIST_PREDICTION_ID =
-        bytes32(0xfae6797bd64999359120d7bb87985af7516abdcb0d57af9ed397f58ae39eded2);
+        bytes32(0x8869d0d88173018eefe8cb26307cc542188ded65eb2ad83f11b00ae94ce806d6);
 }

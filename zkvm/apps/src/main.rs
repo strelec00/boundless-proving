@@ -436,6 +436,7 @@ fn validate_image_data(pixels: &[u32]) -> Result<()> {
 }
 
 // NEW: Generate proof using Boundless Market instead of local proving
+// In generate_proof_via_boundless function
 async fn generate_proof_via_boundless(
     client: &Client,
     image_data: Vec<u32>,
@@ -443,17 +444,16 @@ async fn generate_proof_via_boundless(
 ) -> Result<(u32, Vec<u8>, String)> {
     debug!("🔧 Preparing data for Boundless Market...");
 
-    // Convert to U256 for Solidity compatibility
-    let input_u256: Vec<U256> = image_data.iter()
-        .map(|&val| U256::from(val))
-        .collect();
 
-    debug!("📊 Image data summary: {} pixels converted to U256", input_u256.len());
+    let input_bytes = bincode::serialize(&image_data)
+        .context("Failed to serialize image data")?;
+
+    debug!("📊 Image data summary: {} pixels converted to U256", input_bytes.len());
 
     // Encode the input for the guest program
-    let input_bytes = input_u256.abi_encode();
+    let input_bytes = input_bytes.abi_encode();
 
-    // Build the request based on whether program URL is provided
+    // Build the request
     let request = if let Some(program_url) = program_url {
         debug!("📡 Using provided program URL: {}", program_url);
         client
@@ -478,6 +478,8 @@ async fn generate_proof_via_boundless(
 
     // Wait for the request to be fulfilled
     info!("⏳ Waiting for request fulfillment...");
+
+    // Now use the request_id that's in scope
     let (journal, seal) = client
         .wait_for_request_fulfillment(
             request_id,

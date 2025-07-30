@@ -9,6 +9,7 @@ edition = "2021"
 alloy-primitives = { version = "1.0", default-features = false, features = ["rlp", "serde", "std"] }
 alloy-sol-types = { version = "1.0" }
 risc0-zkvm = { version = "2.1", default-features = false, features = ["std"] }
+bincode = "2.0.1"
 
 [profile.release]
 debug = 1
