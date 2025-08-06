@@ -195,7 +195,33 @@ fn load_mnist_from_file(path: &str) -> Result<Vec<i32>> {
     let contents = fs::read_to_string(path)?;
 
     // Parse the file content - support different formats
-    let input_data: Vec<i32> = if contents.trim().starts_with('[') {
+    let input_data: Vec<i32> = if contents.contains("pub const") && contents.contains("[i32; 784]") {
+        // Rust array format - extract the array part
+        tracing::info!("Parsing Rust array format file");
+
+        let start = contents.find("= [")
+            .context("No array start '= [' found in Rust file")?
+            + 3; // Skip "= ["
+
+        let end = contents.rfind("];")
+            .context("No array end '];' found in Rust file")?;
+
+        let array_content = &contents[start..end];
+
+        // Parse comma-separated values, handling whitespace and empty entries
+        array_content
+            .split(',')
+            .filter_map(|s| {
+                let trimmed = s.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.parse::<i32>()
+                        .with_context(|| format!("Failed to parse number: '{}'", trimmed)))
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?
+    } else if contents.trim().starts_with('[') {
         // JSON array format
         serde_json::from_str(&contents)?
     } else if contents.contains(',') {
