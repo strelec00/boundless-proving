@@ -11,29 +11,32 @@ The model is run off-chain inside a zkVM, and a **zero-knowledge proof (seal)** 
 - Submits the prediction and proof to an Ethereum smart contract (`MNISTPredictor`) for on-chain verification
 - Stores the verified prediction on-chain
 
+## 🎨 Frontend Interface
+
+The project includes a **frontend folder** with an interactive web interface. When you run `npm start` in /front-end folder, it launches a website where users can:
+
+- **Draw digits on a canvas** using mouse or touch input
+- **Generate a 28x28 matrix** automatically from their drawing
+- The matrix contains **1s where the user drew** and **0s for empty pixels**
+- This matrix can then be used as input for the ZK inference process
+
+This provides an intuitive way to test the MNIST digit recognition without needing to prepare image files manually.
+
 ## 🚀 Quick Start
 
 ### 1. Install Dependencies
 
 Install RISC Zero and Boundless CLI tooling:
-
 ```bash
 curl -L https://risczero.com/install | bash
 rzup install
 ```
 
-Install Foundry for smart contract development:
-
-```bash
-curl -L https://foundry.paradigm.xyz | bash
-foundryup
-```
-
 ### 2. Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/zk-ai-mnist-inference
-cd zk-ai-mnist-inference
+git clone https://github.com/strelec00/boundless-proving
+cd boundless-proving
 ```
 
 ### 3. Set Environment Variables
@@ -43,7 +46,7 @@ Make sure your environment is configured with a valid Ethereum private key and R
 ```bash
 export RPC_URL="https://ethereum-sepolia-rpc.publicnode.com"
 export PRIVATE_KEY="your_private_key_here"
-export MNIST_PREDICTOR_ADDRESS="deployed_contract_address"
+export MNIST_PREDICTOR_ADDRESS="deployed_contract_address" or use predeployed address MNIST_PREDICTOR_ADDRESS="0x973E2b3d5996a4C915016887eDd48b7A80C8BdE0"
 ```
 
 If uploading to IPFS via Pinata:
@@ -52,20 +55,31 @@ If uploading to IPFS via Pinata:
 export PINATA_JWT="your_pinata_jwt_token"
 ```
 
-### 4. Run the Inference App
+### 4. Run the Frontend
+
+You can use either a sample MNIST image or provide your own.
+
+```bash
+cd frontend
+npm install
+npm start
+```
+This will open a web browser where you can draw digits and generate the 28x28 matrix.
+
+### 5. Run the Inference App
 
 You can use either a sample MNIST image or provide your own.
 
 #### Option A: Run with Sample Image
 
 ```bash
-RUST_LOG=info cargo run --bin app -- --sample
+RUST_LOG=info MNIST_PREDICTOR_ADDRESS="0x973E2b3d5996a4C915016887eDd48b7A80C8BdE0" cargo run --bin app -- --sample
 ```
 
 #### Option B: Run with Custom Image File
 
 ```bash
-RUST_LOG=info cargo run --bin app -- --image-file ./input/your_image.txt
+RUST_LOG=info MNIST_PREDICTOR_ADDRESS="0x973E2b3d5996a4C915016887eDd48b7A80C8BdE0" cargo run --bin app -- --image-file ./your_matrix.rs
 ```
 
 Image file format must be a list of 784 integers (28x28 pixels), either as a JSON array, CSV, or whitespace-separated.
@@ -134,8 +148,7 @@ cargo run --bin app -- --sample --program-url https://your.ipfs.link/to/guest
 - ✅ Seal Generation
 - ✅ Ethereum Verification
 - ✅ On-Chain Storage
-- 🔜 Frontend Interface
-- 🔜 NFT badge for correct predictions
+- ✅ Frontend Interface
 
 ## 🧠 Credits
 
