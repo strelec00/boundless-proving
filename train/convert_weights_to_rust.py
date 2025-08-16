@@ -9,10 +9,10 @@ import os
 class OptimizedSimpleMLP(nn.Module):
     def __init__(self):
         super().__init__()
-        self.fc1 = nn.Linear(784, 64)
-        self.bn1 = nn.BatchNorm1d(64)
+        self.fc1 = nn.Linear(784, 128)  # Changed from 64 to 128
+        self.bn1 = nn.BatchNorm1d(128)  # Changed from 64 to 128
         self.dropout = nn.Dropout(0.2)
-        self.fc2 = nn.Linear(64, 10)
+        self.fc2 = nn.Linear(128, 10)   # Changed from 64 to 128
         
         # Kaiming initialization for ReLU (matches training)
         nn.init.kaiming_normal_(self.fc1.weight, mode='fan_out', nonlinearity='relu')
@@ -86,9 +86,9 @@ fc1_weight_folded = fc1_weight * (bn_weight / std).unsqueeze(1)
 fc1_bias_folded = bn_weight * (fc1_bias - bn_mean) / std + bn_bias
 
 # Prepare weights (transpose for row-major access in Rust)
-W1 = fc1_weight_folded.T  # [784, 64]
-B1 = fc1_bias_folded      # [64]
-W2 = model.fc2.weight.T   # [64, 10]
+W1 = fc1_weight_folded.T  # [784, 128] - Changed from [784, 64]
+B1 = fc1_bias_folded      # [128] - Changed from [64]
+W2 = model.fc2.weight.T   # [128, 10] - Changed from [64, 10]
 B2 = model.fc2.bias       # [10]
 
 # Convert to fixed-point
@@ -147,6 +147,7 @@ print(f"   - W1: [{W1_fixed.shape[0]}, {W1_fixed.shape[1]}] -> fc1 weights (with
 print(f"   - B1: [{len(B1_fixed)}] -> fc1 bias (with folded BN)")
 print(f"   - W2: [{W2_fixed.shape[0]}, {W2_fixed.shape[1]}] -> fc2 weights")
 print(f"   - B2: [{len(B2_fixed)}] -> fc2 bias")
+print(f"   - Hidden layer size: 128 neurons")  # Added this line for clarity
 
 print(f"\n📁 Files created:")
 print(f"   - Rust includes: ./weights/*.incl.rs")
