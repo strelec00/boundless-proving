@@ -1,0 +1,23 @@
+{
+  "contracts/src/openzeppelin-contracts": {
+    "tag": {
+      "name": "v5.4.0",
+      "rev": "c64a1edb67b6e3f4a15cca8909c9482ad33a02b0"
+    }
+  },
+  "contracts/src/risc0-ethereum": {
+    "tag": {
+      "name": "v2.2.2",
+      "rev": "15db3fe560f6174839d676a9b5e732a81131347c"
+    }
+  },
+  "lib/risc0-ethereum": {
+    "rev": "382d76a8040068243a5d13e3de50fcca4224b0d6"
+  },
+  "contracts/src/forge-std": {
+    "tag": {
+      "name": "v1.10.0",
+      "rev": "8bbcf6e3f8f62f419e5429a0bd89331c85c37824"
+    }
+  }
+}

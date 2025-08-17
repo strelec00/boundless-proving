@@ -1,4 +1,4 @@
-# improved_mnist_training.py
+# improved_mnist_cnn_training.py
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -49,63 +49,147 @@ train_loader = DataLoader(train_dataset, batch_size=256, shuffle=True, num_worke
 val_loader = DataLoader(val_dataset, batch_size=1000, shuffle=False, num_workers=0)
 test_loader = DataLoader(test_set, batch_size=1000, shuffle=False, num_workers=0)
 
-# Enhanced MLP with better architecture
-class EnhancedMLP(nn.Module):
-    def __init__(self, hidden_sizes=[128, 64], dropout_rate=0.3):
+# Enhanced CNN with better architecture (Teacher Model)
+class EnhancedCNN(nn.Module):
+    def __init__(self, dropout_rate=0.3):
         super().__init__()
-        self.layers = nn.ModuleList()
-        self.dropouts = nn.ModuleList()
-        self.batch_norms = nn.ModuleList()
+        # Convolutional layers
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, padding=1)  # 28x28 -> 28x28
+        self.bn1 = nn.BatchNorm2d(32)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)  # 28x28 -> 28x28
+        self.bn2 = nn.BatchNorm2d(64)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)  # 14x14 -> 14x14
+        self.bn3 = nn.BatchNorm2d(128)
+        self.conv4 = nn.Conv2d(128, 256, kernel_size=3, padding=1)  # 14x14 -> 14x14
+        self.bn4 = nn.BatchNorm2d(256)
         
-        # Input layer
-        prev_size = 784
-        for hidden_size in hidden_sizes:
-            self.layers.append(nn.Linear(prev_size, hidden_size))
-            self.batch_norms.append(nn.BatchNorm1d(hidden_size))
-            self.dropouts.append(nn.Dropout(dropout_rate))
-            prev_size = hidden_size
+        # Pooling
+        self.pool = nn.MaxPool2d(2, 2)
+        self.adaptive_pool = nn.AdaptiveAvgPool2d((7, 7))
         
-        # Output layer
-        self.output = nn.Linear(prev_size, 10)
+        # Fully connected layers
+        self.fc1 = nn.Linear(256 * 7 * 7, 512)
+        self.bn_fc1 = nn.BatchNorm1d(512)
+        self.fc2 = nn.Linear(512, 256)
+        self.bn_fc2 = nn.BatchNorm1d(256)
+        self.fc3 = nn.Linear(256, 10)
         
-        # Better initialization
-        for layer in self.layers:
-            nn.init.kaiming_normal_(layer.weight, mode='fan_out', nonlinearity='relu')
-            nn.init.zeros_(layer.bias)
-        nn.init.xavier_uniform_(self.output.weight)
-        nn.init.zeros_(self.output.bias)
+        # Dropout
+        self.dropout = nn.Dropout(dropout_rate)
+        
+        # Initialize weights
+        self._initialize_weights()
+    
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                nn.init.zeros_(m.bias)
+            elif isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d)):
+                nn.init.ones_(m.weight)
+                nn.init.zeros_(m.bias)
     
     def forward(self, x):
-        x = x.view(-1, 784)
+        # Conv block 1
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = F.relu(x)
         
-        for layer, bn, dropout in zip(self.layers, self.batch_norms, self.dropouts):
-            x = layer(x)
-            x = bn(x)
-            x = F.relu(x)
-            x = dropout(x)
+        # Conv block 2
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = F.relu(x)
+        x = self.pool(x)  # 28x28 -> 14x14
         
-        x = self.output(x)
+        # Conv block 3
+        x = self.conv3(x)
+        x = self.bn3(x)
+        x = F.relu(x)
+        
+        # Conv block 4
+        x = self.conv4(x)
+        x = self.bn4(x)
+        x = F.relu(x)
+        x = self.pool(x)  # 14x14 -> 7x7
+        
+        # Adaptive pooling to ensure consistent size
+        x = self.adaptive_pool(x)  # 7x7
+        
+        # Flatten
+        x = x.view(x.size(0), -1)
+        
+        # FC layers
+        x = self.fc1(x)
+        x = self.bn_fc1(x)
+        x = F.relu(x)
+        x = self.dropout(x)
+        
+        x = self.fc2(x)
+        x = self.bn_fc2(x)
+        x = F.relu(x)
+        x = self.dropout(x)
+        
+        x = self.fc3(x)
         return x
 
-# Simpler model for fixed-point export (but better trained) - NOW WITH 128 HIDDEN UNITS
-class OptimizedSimpleMLP(nn.Module):
+# Simpler CNN for fixed-point export (Student Model)
+class OptimizedSimpleCNN(nn.Module):
     def __init__(self):
         super().__init__()
-        self.fc1 = nn.Linear(784, 128)  # Changed from 128 to 256
-        self.bn1 = nn.BatchNorm1d(128)  # Changed from 128 to 256
-        self.dropout = nn.Dropout(0.2)
-        self.fc2 = nn.Linear(128, 10)  
+        # Convolutional layers
+        self.conv1 = nn.Conv2d(1, 16, kernel_size=5, padding=2)  # 28x28 -> 28x28
+        self.bn1 = nn.BatchNorm2d(16)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=5, padding=2)  # 14x14 -> 14x14
+        self.bn2 = nn.BatchNorm2d(32)
         
-        # Kaiming initialization for ReLU
-        nn.init.kaiming_normal_(self.fc1.weight, mode='fan_out', nonlinearity='relu')
-        nn.init.zeros_(self.fc1.bias)
-        nn.init.xavier_uniform_(self.fc2.weight)
-        nn.init.zeros_(self.fc2.bias)
+        # Pooling
+        self.pool = nn.MaxPool2d(2, 2)
+        
+        # Fully connected layers
+        self.fc1 = nn.Linear(32 * 7 * 7, 128)
+        self.bn_fc = nn.BatchNorm1d(128)
+        self.dropout = nn.Dropout(0.2)
+        self.fc2 = nn.Linear(128, 10)
+        
+        # Initialize weights
+        self._initialize_weights()
+    
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                nn.init.zeros_(m.bias)
+            elif isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d)):
+                nn.init.ones_(m.weight)
+                nn.init.zeros_(m.bias)
     
     def forward(self, x):
-        x = x.view(-1, 784)
-        x = self.fc1(x)
+        # Conv block 1
+        x = self.conv1(x)
         x = self.bn1(x)
+        x = F.relu(x)
+        x = self.pool(x)  # 28x28 -> 14x14
+        
+        # Conv block 2
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = F.relu(x)
+        x = self.pool(x)  # 14x14 -> 7x7
+        
+        # Flatten
+        x = x.view(x.size(0), -1)  # 32 * 7 * 7 = 1568
+        
+        # FC layers
+        x = self.fc1(x)
+        x = self.bn_fc(x)
         x = F.relu(x)
         x = self.dropout(x)
         x = self.fc2(x)
@@ -114,8 +198,8 @@ class OptimizedSimpleMLP(nn.Module):
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Use enhanced model for training, then distill to simple model
-teacher_model = EnhancedMLP(hidden_sizes=[256, 128, 64], dropout_rate=0.25).to(device)
-student_model = OptimizedSimpleMLP().to(device)
+teacher_model = EnhancedCNN(dropout_rate=0.25).to(device)
+student_model = OptimizedSimpleCNN().to(device)
 
 # Loss functions
 criterion = nn.CrossEntropyLoss()
@@ -130,14 +214,14 @@ teacher_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(teacher
 student_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(student_optimizer, mode='max', factor=0.5, patience=5)
 
 # Training parameters
-num_epochs = 100
+num_epochs = 10
 best_teacher_acc = 0.0
 best_student_acc = 0.0
 patience_counter = 0
 max_patience = 15
 temperature = 4.0  # For knowledge distillation
 
-print("Phase 1: Training Teacher Model")
+print("Phase 1: Training Teacher CNN Model")
 print("="*50)
 
 # Phase 1: Train teacher model
@@ -194,29 +278,28 @@ for epoch in range(num_epochs):
     
     if val_acc > best_teacher_acc:
         best_teacher_acc = val_acc
-        torch.save(teacher_model.state_dict(), './models/best_teacher_model.pth')
+        torch.save(teacher_model.state_dict(), './models/best_teacher_cnn_model.pth')
         patience_counter = 0
     else:
         patience_counter += 1
     
-    if epoch % 10 == 0:
-        print(f'Epoch {epoch+1}: Train Acc: {train_acc:.4f}, Val Acc: {val_acc:.4f}, Best: {best_teacher_acc:.4f}')
+    print(f'Epoch {epoch+1}: Train Acc: {train_acc:.4f}, Val Acc: {val_acc:.4f}, Best: {best_teacher_acc:.4f}')
     
     if patience_counter >= max_patience:
         print(f"Early stopping at epoch {epoch+1}")
         break
 
 # Load best teacher model
-teacher_model.load_state_dict(torch.load('./models/best_teacher_model.pth'))
+teacher_model.load_state_dict(torch.load('./models/best_teacher_cnn_model.pth'))
 teacher_model.eval()
 
-print(f"\nTeacher Model Best Validation Accuracy: {best_teacher_acc:.4f}")
-print("\nPhase 2: Knowledge Distillation to Student Model (128 hidden units)")
+print(f"\nTeacher CNN Model Best Validation Accuracy: {best_teacher_acc:.4f}")
+print("\nPhase 2: Knowledge Distillation to Student CNN Model")
 print("="*50)
 
 # Phase 2: Knowledge distillation to student model
 patience_counter = 0
-for epoch in range(80):
+for epoch in range(10):
     student_model.train()
     train_loss = 0
     
@@ -267,23 +350,23 @@ for epoch in range(80):
     
     if val_acc > best_student_acc:
         best_student_acc = val_acc
-        torch.save(student_model.state_dict(), './models/best_student_model.pth')
+        torch.save(student_model.state_dict(), './models/best_student_cnn_model.pth')
         patience_counter = 0
     else:
         patience_counter += 1
     
-    if epoch % 10 == 0:
-        print(f'Epoch {epoch+1}: Val Acc: {val_acc:.4f}, Best: {best_student_acc:.4f}')
+  
+    print(f'Epoch {epoch+1}: Val Acc: {val_acc:.4f}, Best: {best_student_acc:.4f}')
     
     if patience_counter >= 15:
         print(f"Early stopping at epoch {epoch+1}")
         break
 
 # Load best student model for export
-student_model.load_state_dict(torch.load('./models/best_student_model.pth'))
+student_model.load_state_dict(torch.load('./models/best_student_cnn_model.pth'))
 student_model.eval()
 
-print(f"\nStudent Model Best Validation Accuracy: {best_student_acc:.4f}")
+print(f"\nStudent CNN Model Best Validation Accuracy: {best_student_acc:.4f}")
 
 # Test on test set
 correct = 0
@@ -319,42 +402,77 @@ def to_fixed(tensor, scale=SCALE):
     rounded = np.round(scaled)
     return np.clip(rounded, -2147483648, 2147483647).astype(np.int32)
 
-# Export student model weights (transpose for C)
-# Note: BatchNorm parameters need to be folded into weights for inference
-bn_mean = student_model.bn1.running_mean.detach().cpu()
-bn_var = student_model.bn1.running_var.detach().cpu()
-bn_weight = student_model.bn1.weight.detach().cpu()
-bn_bias = student_model.bn1.bias.detach().cpu()
-eps = student_model.bn1.eps
+# Export student CNN model weights
+# Note: For CNN deployment, you'll need to fold batch norm into conv layers
 
-# Fold batch norm into fc1
-fc1_weight = student_model.fc1.weight.detach().cpu()
-fc1_bias = student_model.fc1.bias.detach().cpu()
+# Fold batch norm into conv layers for inference
+def fold_bn_into_conv(conv_layer, bn_layer):
+    """Fold batch normalization into convolution layer"""
+    with torch.no_grad():
+        # Get parameters
+        conv_weight = conv_layer.weight.clone()
+        conv_bias = conv_layer.bias.clone() if conv_layer.bias is not None else torch.zeros(conv_layer.out_channels)
+        
+        bn_weight = bn_layer.weight.clone()
+        bn_bias = bn_layer.bias.clone()
+        bn_mean = bn_layer.running_mean.clone()
+        bn_var = bn_layer.running_var.clone()
+        eps = bn_layer.eps
+        
+        # Compute folded parameters
+        std = torch.sqrt(bn_var + eps)
+        factor = bn_weight / std
+        
+        # Fold into conv weight and bias
+        folded_weight = conv_weight * factor.view(-1, 1, 1, 1)
+        folded_bias = bn_weight * (conv_bias - bn_mean) / std + bn_bias
+        
+        return folded_weight, folded_bias
 
-# Fold BN: y = gamma * (x - mean) / sqrt(var + eps) + beta
-# Which becomes: y = (gamma / sqrt(var + eps)) * x + (beta - gamma * mean / sqrt(var + eps))
+# Fold batch norm layers
+conv1_weight, conv1_bias = fold_bn_into_conv(student_model.conv1, student_model.bn1)
+conv2_weight, conv2_bias = fold_bn_into_conv(student_model.conv2, student_model.bn2)
+
+# Fold FC batch norm
+fc1_weight = student_model.fc1.weight.clone()
+fc1_bias = student_model.fc1.bias.clone()
+bn_weight = student_model.bn_fc.weight.clone()
+bn_bias = student_model.bn_fc.bias.clone()
+bn_mean = student_model.bn_fc.running_mean.clone()
+bn_var = student_model.bn_fc.running_var.clone()
+eps = student_model.bn_fc.eps
+
 std = torch.sqrt(bn_var + eps)
 fc1_weight_folded = fc1_weight * (bn_weight / std).unsqueeze(1)
 fc1_bias_folded = bn_weight * (fc1_bias - bn_mean) / std + bn_bias
 
-W1 = fc1_weight_folded.T  # Shape: [784, 128]
-B1 = fc1_bias_folded       # Shape: [128]
-W2 = student_model.fc2.weight.T  # Shape: [128, 10]
-B2 = student_model.fc2.bias      # Shape: [10]
+fc2_weight = student_model.fc2.weight.clone()
+fc2_bias = student_model.fc2.bias.clone()
 
-np.save("./weights/W1.npy", to_fixed(W1))
-np.save("./weights/B1.npy", to_fixed(B1))
-np.save("./weights/W2.npy", to_fixed(W2))
-np.save("./weights/B2.npy", to_fixed(B2))
+# Save all weights
+np.save("./weights/conv1_weight.npy", to_fixed(conv1_weight))
+np.save("./weights/conv1_bias.npy", to_fixed(conv1_bias))
+np.save("./weights/conv2_weight.npy", to_fixed(conv2_weight))
+np.save("./weights/conv2_bias.npy", to_fixed(conv2_bias))
+np.save("./weights/fc1_weight.npy", to_fixed(fc1_weight_folded))
+np.save("./weights/fc1_bias.npy", to_fixed(fc1_bias_folded))
+np.save("./weights/fc2_weight.npy", to_fixed(fc2_weight))
+np.save("./weights/fc2_bias.npy", to_fixed(fc2_bias))
 np.save("./weights/scale.npy", np.array([SCALE]))
 
-print(f"\nWeights exported with scale={SCALE}")
-print(f"Weight shapes: W1={W1.shape}, B1={B1.shape}, W2={W2.shape}, B2={B2.shape}")
+print(f"\nCNN Weights exported with scale={SCALE}")
+print(f"Weight shapes:")
+print(f"  conv1_weight: {conv1_weight.shape}")
+print(f"  conv1_bias: {conv1_bias.shape}")
+print(f"  conv2_weight: {conv2_weight.shape}")
+print(f"  conv2_bias: {conv2_bias.shape}")
+print(f"  fc1_weight: {fc1_weight_folded.shape}")
+print(f"  fc1_bias: {fc1_bias_folded.shape}")
+print(f"  fc2_weight: {fc2_weight.shape}")
+print(f"  fc2_bias: {fc2_bias.shape}")
 
 # Test your samples
 print("\n=== Testing Your Sample Digits ===")
-
-
 
 # Test with your specific sample that should be 9
 x_test0 = torch.tensor([[
@@ -660,24 +778,37 @@ x_test9 = torch.tensor([[
 ]], dtype=torch.float32)
 
 
-test_samples = [
-    # Only test the samples you actually have defined
-    (x_test0, 0), 
-    (x_test1, 1), 
-    (x_test2, 2),
-    (x_test3, 3),
-    (x_test4, 4),
-    (x_test5, 5),
-    (x_test6, 6),
-    (x_test7, 7),
-    (x_test8, 8),  # This should be an 8
-    (x_test9, 9),  # This should be a 9
-]
-student_model.eval()
-correct_predictions = 0
+x_test9 = torch.tensor([[
+   # Add your 28x28 data for digit 9 here
+]], dtype=torch.float32)
 
-for x_test, expected in test_samples:
-    if x_test is not None:
+def test_custom_samples():
+    """Test function for custom digit samples"""
+    test_samples = []
+    
+    # Only add samples that have data
+    for i, x_test in enumerate([x_test0, x_test1, x_test2, x_test3, x_test4, 
+                               x_test5, x_test6, x_test7, x_test8, x_test9]):
+        if x_test is not None and x_test.numel() > 0:
+            # Reshape to proper format: (batch, channels, height, width)
+            if len(x_test.shape) == 2:  # If it's (1, 784), reshape to (1, 1, 28, 28)
+                x_reshaped = x_test.view(1, 1, 28, 28)
+            elif len(x_test.shape) == 3:  # If it's (1, 28, 28), add channel dim
+                x_reshaped = x_test.unsqueeze(1)  # (1, 1, 28, 28)
+            else:
+                x_reshaped = x_test
+            test_samples.append((x_reshaped, i))
+    
+    if not test_samples:
+        print("No test samples with data found. Please add your 28x28 digit matrices.")
+        return
+    
+    student_model.eval()
+    correct_predictions = 0
+    
+    print(f"Testing {len(test_samples)} custom samples...")
+    
+    for x_test, expected in test_samples:
         x = x_test.to(device)
         with torch.no_grad():
             logits = student_model(x)
@@ -689,9 +820,11 @@ for x_test, expected in test_samples:
             
             symbol = "✓" if is_correct else "✗"
             print(f"Digit {expected}: Predicted {pred} (confidence: {confidence:.3f}) {symbol}")
+    
+    accuracy = correct_predictions / len(test_samples)
+    print(f"\nAccuracy on your custom samples: {accuracy*100:.1f}%")
 
-if any(x is not None for x, _ in test_samples):
-    accuracy = correct_predictions / sum(1 for x, _ in test_samples if x is not None)
-    print(f"\nAccuracy on your samples: {accuracy*100:.1f}%")
+# Run the test
+test_custom_samples()
 
-print("\nTraining complete!")
+print("\nCNN Training complete!")
