@@ -48,7 +48,7 @@ app.post('/api/predict', async (req, res) => {
     console.log('Absolute path:', path.resolve(filePath));
     
     // Run the CLI command from your main Rust project directory
-    const cmd = `RUST_LOG=info MNIST_PREDICTOR_ADDRESS="0x9634d65c6C38877E6ca9730c1bD86762695C1cC3" cargo run --bin app -- --image-file ./canvas.rs`;
+    const cmd = `RUST_LOG=info MNIST_PREDICTOR_ADDRESS="0xc64BF4167651Dd458BAd19Eac5e25700F05002aC" cargo run --bin app -- --image-file ./canvas.rs`;
     
     console.log('Running command from:', RUST_PROJECT_PATH);
     console.log('Command:', cmd);
@@ -61,7 +61,7 @@ app.post('/api/predict', async (req, res) => {
       env: {
         ...process.env,
         RUST_LOG: 'info',
-        MNIST_PREDICTOR_ADDRESS: '0x9634d65c6C38877E6ca9730c1bD86762695C1cC3'
+        MNIST_PREDICTOR_ADDRESS: '0xc64BF4167651Dd458BAd19Eac5e25700F05002aC'
       }
     });
 
